@@ -91,7 +91,8 @@ void Schedule::resume(int id) {
             C->status = COROUTINE_RUNNING;      
             // 设置协程的入口函数和参数，mainfunc是协程开始执行的函数，这里将调度器对象指针分成32位整数传递给mainfunc
             makecontext(&C->ctx, reinterpret_cast<void(*)()>(mainfunc), 2, static_cast<uint32_t>(ptr), static_cast<uint32_t>(ptr >> 32));
-            swapcontext(&main_, &C->ctx);       // 切换上下文，从主上下文切换到协程上下文
+            // 保存当前上下文到main，然后切换到ctx对应的上下文执行，即执行上面设置的mainfunc，执行完再且回到这里
+            swapcontext(&main_, &C->ctx);       
             break;
 
         case COROUTINE_SUSPEND:
@@ -133,13 +134,17 @@ int Schedule::runningid() const{
 
 // 保存协程的栈状态，C:指向要保存栈状态的协程对象，top:指向当前栈顶位置的指针
 void Schedule::save_stack(Coroutine* C, char* top) {
+    // 使用dummy计算当前栈顶地址，即esp
     char dummy = 0;
     assert(top - &dummy <= STACK_SIZE);
+    // top - &dummy算出当前栈的上下文有多大，如果比当前容量大，就扩容
     if (C->cap < top - &dummy) {
         delete[] C->stack;
         C->cap = top - &dummy;
         C->stack = new char[C->cap];
     }
+    // 记录当前栈大小
     C->size = top - &dummy;
+    // 复制公共栈的数据到私有栈
     memcpy(C->stack, &dummy, C->size);
 }
